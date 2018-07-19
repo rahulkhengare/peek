@@ -1,0 +1,178 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "storageAccountType": {
+          "type": "string",
+          "defaultValue": "Standard_LRS",
+          "allowedValues": [
+            "Standard_LRS",
+            "Standard_GRS",
+            "Standard_ZRS",
+            "Premium_LRS"
+          ],
+          "metadata": {
+            "description": "Storage Account type"
+          }
+        },
+        "ADMIN_USERNAME": {
+            "type": "string"
+        },
+        "ADMIN_PASSWORD": {
+            "type": "string"     
+        },
+        "publisherEmail": {
+            "type": "string",
+            "minLength": 1,
+            "metadata": {
+              "description": "The email address of the owner of the service"
+            }
+        },
+        "publisherName": {
+            "type": "string",
+            "minLength": 1,
+            "metadata": {
+              "description": "The name of the owner of the service"
+            }
+        },
+        "sku": {
+            "type": "string",
+            "allowedValues": [
+                "F1",
+                "D1",
+                "B1",
+                "B2",
+                "B3",
+                "S1",
+                "S2",
+                "S3",
+                "P1",
+                "P2",
+                "P3",
+                "P4"
+            ],
+            "defaultValue": "F1",
+            "metadata": {
+              "description": "The pricing tier of this webapp service"
+            }
+        },
+        "skuCount": {
+            "type": "int",
+            "defaultValue": 1,
+            "metadata": {
+              "description": "The instance size of this API Management service."
+            }
+        }   
+    },    
+    "variables": {
+        "storageAccountName": "[concat(uniquestring(resourceGroup().id), 'standardsa')]",
+        "sqlServerName": "[concat(uniquestring(resourceGroup().id), 'sqlserver')]",
+        "appServicePlanName" : "[concat(uniquestring(resourceGroup().id), 'appserviceplan')]",
+        "webAppName": "[concat(uniquestring(resourceGroup().id), 'webapp')]"
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Storage/storageAccounts",
+            "name": "[variables('storageAccountName')]",
+            "apiVersion": "2015-06-15",
+            "location": "[resourceGroup().location]",
+            "tags": {
+                "displayName": "StorageAccount1"
+            },
+            "properties": {
+                "accountType": "[parameters('storageAccountType')]",
+                "accountKind": "GeneralPurpose"
+            }
+        },
+        {
+            "apiVersion": "2014-04-01-preview",
+            "name": "[variables('sqlServerName')]",
+            "type": "Microsoft.Sql/servers",
+            "location": "[resourceGroup().location]",
+            "tags": {
+                "displayName": "sqlserver1"
+            },
+            "properties": {
+                "administratorLogin": "[parameters('ADMIN_USERNAME')]",
+                "administratorLoginPassword": "[parameters('ADMIN_PASSWORD')]"
+            },
+            "resources": [
+                {
+                    "apiVersion": "2014-04-01-preview",
+                    "dependsOn": [
+                        "[variables('sqlServerName')]"
+                    ],
+                    "location": "[resourceGroup().location]",
+                    "name": "AllowAllWindowsAzureIps",
+                    "properties": {
+                        "startIpAddress": "0.0.0.0",
+                        "endIpAddress": "0.0.0.0"
+                    },
+                    "type": "firewallrules"
+                }    
+            ]
+        },
+        {
+            "type": "Microsoft.Sql/servers/databases",
+            "name": "[concat(variables('sqlServerName'), '/sqldb1')]",
+            "apiVersion": "2014-04-01-preview",
+            "location": "[resourceGroup().location]",
+            "tags": {
+                "displayName": "SQLdb1"
+            },
+            "dependsOn": [
+                "[variables('sqlServerName')]"
+            ],
+            "properties": {
+                "collation": "SQL_Latin1_General_CP1_CI_AS",
+                "edition": "Basic",
+                "maxSizeBytes": "1073741824",
+                "requestedServiceObjectiveName": "Basic"
+            }
+        },
+        {
+            "apiVersion": "2016-09-01",
+            "name": "[variables('appServicePlanName')]",
+            "type": "Microsoft.Web/serverfarms",
+            "location": "[resourceGroup().location]",
+            "sku": {
+                "name": "[parameters('sku')]",
+                "capacity": "[parameters('skuCount')]"    
+            },
+            "tags": {
+                "displayName": "[variables('appServicePlanName')]"
+            },
+            "properties": {
+                "name": "[variables('appServicePlanName')]"
+            }
+        },
+        {
+            "apiVersion": "2015-08-01",
+            "name": "[variables('webAppName')]",
+            "type": "Microsoft.Web/sites",
+            "location": "[resourceGroup().location]",
+            "tags": {
+                "[concat('hidden-related:', resourceGroup().id, '/providers/Microsoft.Web/serverfarms/APP_SERVICE_PLAN_NAME')]": "Resource",
+                "displayName": "[variables('webAppName')]"
+            },
+            "dependsOn": [
+                "[resourceId('Microsoft.Web/serverfarms', variables('appServicePlanName'))]"
+            ],
+            "properties": {
+                "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('appServicePlanName'))]",
+                "publisherEmail": "[parameters('publisherEmail')]",
+                "publisherName": "[parameters('publisherName')]"
+            }
+        }
+    ],
+    "outputs": {
+        "storageAccountName": {
+            "type": "string",
+            "value": "[variables('storageAccountName')]"
+        },
+        "storageAccountKey": {
+            "type": "string",
+            "value": "[listKeys( resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), providers('Microsoft.Storage', 'storageAccounts').apiVersions[0]).keys[0].value]"
+        }
+    }
+}
